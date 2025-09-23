@@ -54,6 +54,28 @@ def _get_mktcap_ak() -> pd.DataFrame:
     df["mktcap"] = pd.to_numeric(df["mktcap"], errors="coerce")
     return df
 
+def _get_mktcap_ts() -> pd.DataFrame:
+    """使用Tushare获取市值快照，返回列：code, mktcap（单位：元）"""
+    for attempt in range(1, 4):
+        try:
+            df = ts.get_stock_basics()
+            if df is not None and not df.empty:
+                df = df.reset_index()
+                df = df[['code', 'total_mv']].rename(columns={'total_mv': 'mktcap'})
+                df['mktcap'] = df['mktcap'] * 1e4  # 转换为元
+                df['code'] = df['code'].apply(lambda x: x.zfill(6))
+                return df
+        except Exception as e:
+            logger.warning("Tushare 获取市值快照失败(%d/3): %s", attempt, e)
+            time.sleep(backoff := random.uniform(1, 3) * attempt)
+    logger.warning("Tushare 获取市值失败，使用备选方案")
+    return pd.DataFrame(columns=['code', 'mktcap'])
+
+def _get_mktcap_mootdx() -> pd.DataFrame:
+    """Mootdx数据源的市值获取备选方案"""
+    logger.warning("使用Mootdx数据源时，市值筛选功能可能受限")
+    return pd.DataFrame(columns=['code', 'mktcap'])
+
 # --------------------------- 股票池筛选 --------------------------- #
 
 def get_constituents(
@@ -303,7 +325,7 @@ def main():
 
     # ---------- Token 处理 ---------- #
     if args.datasource == "tushare":
-        ts_token = " "  # 在这里补充token
+        ts_token = "fa3d47f17ddea7d890b38511d28ff0e5e91b8675881af6ff3b611358"  # 在这里补充token
         ts.set_token(ts_token)
         global pro
         pro = ts.pro_api()
@@ -316,7 +338,18 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # ---------- 市值快照 & 股票池 ---------- #
-    mktcap_df = _get_mktcap_ak()    
+    # 根据数据源选择市值获取方法
+    if args.datasource == 'mootdx':
+        mktcap_df = _get_mktcap_mootdx()
+    elif args.datasource == 'tushare':
+        mktcap_df = _get_mktcap_ts()
+    else:
+        # 尝试使用AKShare获取市值，如果失败则尝试Tushare
+        try:
+            mktcap_df = _get_mktcap_ak()
+        except RuntimeError:
+            logger.warning("尝试使用Tushare作为备选市值数据源")
+            mktcap_df = _get_mktcap_ts()
 
     codes_from_filter = get_constituents(
         args.min_mktcap,

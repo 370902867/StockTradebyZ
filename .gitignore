@@ -1,0 +1,35 @@
+# 操作系统文件
+.DS_Store
+Thumbs.db
+
+# Python相关
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 虚拟环境
+venv/
+env/
+*.venv/
+.venv/
+
+# 依赖包
+.pip/
+.pip_cache/
+
+# 日志文件
+*.log
+fetch.log
+select_results.log
+
+# 数据目录
+data/
+
+# 配置文件
+configs.json
+appendix.json
+
+# 其他
+*.swp
+*.swo
+*~
