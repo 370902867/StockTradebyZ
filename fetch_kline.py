@@ -51,6 +51,8 @@ def _get_mktcap_ak() -> pd.DataFrame:
         raise RuntimeError("AKShare 连续三次拉取市值快照失败！")
 
     df = df[["代码", "总市值"]].rename(columns={"代码": "code", "总市值": "mktcap"})
+    # 确保code列是字符串类型，避免后续字符串操作失败
+    df["code"] = df["code"].astype(str)
     df["mktcap"] = pd.to_numeric(df["mktcap"], errors="coerce")
     return df
 
@@ -86,8 +88,12 @@ def get_constituents(
 ) -> List[str]:
     df = mktcap_df if mktcap_df is not None else _get_mktcap_ak()
 
+    # 只保留正常的A股股票代码（以60、00、30开头）
     cond = (df["mktcap"] >= min_cap) & (df["mktcap"] <= max_cap)
+    # 只允许A股代码格式：600xxx, 601xxx, 603xxx, 605xxx, 000xxx, 001xxx, 002xxx, 300xxx, 301xxx
+    cond &= df["code"].str.match(r'^(60[0135]|00[012]|30[01])\d{3}$')
     if small_player:
+        # 排除创业板、科创板等（根据需要调整）
         cond &= ~df["code"].str.startswith(("300", "301", "688", "8", "4"))
 
     codes = df.loc[cond, "code"].str.zfill(6).tolist()
@@ -205,12 +211,22 @@ def _get_kline_akshare(code: str, start: str, end: str, adjust: str) -> pd.DataF
 def _get_kline_mootdx(code: str, start: str, end: str, adjust: str, freq_code: int) -> pd.DataFrame:    
     symbol = code.zfill(6)
     freq = _FREQ_MAP.get(freq_code, "day")
-    client = Quotes.factory(market="std")
-    try:
-        df = client.bars(symbol=symbol, frequency=freq, adjust=adjust or None)
-    except Exception as e:
-        logger.warning("Mootdx 拉取 %s 失败: %s", code, e)
+    
+    for attempt in range(1, 4):
+        try:
+            client = Quotes.factory(market="std")
+            # 设置超时时间为10秒
+            import socket
+            socket.setdefaulttimeout(10)
+            
+            df = client.bars(symbol=symbol, frequency=freq, adjust=adjust or None)
+            break
+        except Exception as e:
+            logger.warning("Mootdx 拉取 %s 失败(%d/3): %s", code, attempt, e)
+            time.sleep(random.uniform(1, 2) * attempt)
+    else:
         return pd.DataFrame()
+    
     if df is None or df.empty:
         return pd.DataFrame()
     
@@ -359,7 +375,11 @@ def main():
     )    
     # 加上本地已有的股票，确保旧数据也能更新
     local_codes = [p.stem for p in out_dir.glob("*.csv")]
-    codes = sorted(set(codes_from_filter) | set(local_codes))
+    # 合并并去重
+    all_codes = sorted(set(codes_from_filter) | set(local_codes))
+    # 再次筛选，只保留符合A股代码格式的股票
+    import re
+    codes = [code for code in all_codes if re.match(r'^(60[0135]|00[012]|30[01])\d{3}$', code)]
 
     if not codes:
         logger.error("筛选结果为空，请调整参数！")

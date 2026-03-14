@@ -10,7 +10,10 @@
         "max_window": 60,
         "price_range_pct": 1,
         "bbi_q_threshold": 0.3,
-        "j_q_threshold": 0.10
+        "j_q_threshold": 0.10,
+        "vol_mean_window": 20,
+        "vol_less_days": 3,
+        "enable_vol_filter": false
       }
     },
     {
@@ -29,7 +32,10 @@
           "max_window": 60,
           "price_range_pct": 1,
           "bbi_q_threshold": 0.3,
-          "j_q_threshold": 0.10
+          "j_q_threshold": 0.10,
+          "vol_mean_window": 20,
+          "vol_less_days": 3,
+          "enable_vol_filter": true
         }
       }
     },
@@ -70,6 +76,15 @@
         "fluc_threshold": 0.03,
         "j_q_threshold": 0.10,
         "gap_threshold": 0.2
+      }
+    },
+    {
+      "class": "VolumeBreakoutSelector",
+      "alias": "放量突破选股",
+      "activate": true,
+      "params": {
+        "volume_ratio_threshold": 3.0,
+        "high_day_window": 20
       }
     }
   ]

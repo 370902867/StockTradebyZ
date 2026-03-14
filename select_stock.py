@@ -32,8 +32,14 @@ def load_data(data_dir: Path, codes: Iterable[str]) -> Dict[str, pd.DataFrame]:
         if not fp.exists():
             logger.warning("%s 不存在，跳过", fp.name)
             continue
-        df = pd.read_csv(fp, parse_dates=["date"]).sort_values("date")
-        frames[code] = df
+        try:
+            df = pd.read_csv(fp).sort_values("date")
+            # 确保date列是datetime类型
+            df["date"] = pd.to_datetime(df["date"])
+            frames[code] = df
+        except Exception as e:
+            logger.warning("加载 %s 失败: %s", fp.name, e)
+            continue
     return frames
 
 
@@ -65,14 +71,21 @@ def instantiate_selector(cfg: Dict[str, Any]):
     if not cls_name:
         raise ValueError("缺少 class 字段")
 
-    try:
-        module = importlib.import_module("Selector")
-        cls = getattr(module, cls_name)
-    except (ModuleNotFoundError, AttributeError) as e:
-        raise ImportError(f"无法加载 Selector.{cls_name}: {e}") from e
-
-    params = cfg.get("params", {})
-    return cfg.get("alias", cls_name), cls(**params)
+    # 尝试从多个模块加载
+    modules_to_try = ["VolumeBreakoutSelector", "Selector"]
+    
+    for module_name in modules_to_try:
+        try:
+            module = importlib.import_module(module_name)
+            if hasattr(module, cls_name):
+                cls = getattr(module, cls_name)
+                params = cfg.get("params", {})
+                return cfg.get("alias", cls_name), cls(**params)
+        except ModuleNotFoundError:
+            continue
+    
+    # 如果所有模块都尝试过但找不到，抛出错误
+    raise ImportError(f"无法在 {', '.join(modules_to_try)} 模块中找到 {cls_name} 类")
 
 
 # ---------- 主函数 ----------
@@ -108,7 +121,7 @@ def main():
     trade_date = (
         pd.to_datetime(args.date)
         if args.date
-        else max(df["date"].max() for df in data.values())
+        else max(pd.to_datetime(df["date"].max()) for df in data.values())
     )
     if not args.date:
         logger.info("未指定 --date，使用最近日期 %s", trade_date.date())

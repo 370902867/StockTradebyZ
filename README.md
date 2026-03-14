@@ -1,6 +1,6 @@
 # Z哥战法的Python实现
 
-> **更新时间：2025-07-03** – 增加填坑战法。
+> **更新时间：2025-09-23** – 增加填坑战法、少妇战法添加成交量过滤条件。
 
 ---
 
@@ -190,6 +190,9 @@ python select_stock.py \
 | `price_range_pct` | `0.5`  | 最近 *max\_window* 根 K 线内，收盘价最大波动（`high/low−1`）不得超过此值 |
 | `bbi_q_threshold` | `0.1`  | 允许 BBI 一阶差分为负的分位阈值（回撤容忍度）                           |
 | `j_q_threshold`   | `0.10` | 当日 **J** 值需 *不高于* 最近窗口内该分位数                         |
+| `vol_mean_window` | `20`   | 计算成交量均值的窗口（交易日）                                      |
+| `vol_less_days`   | `3`    | 要求连续多少天成交量小于均值                                         |
+| `enable_vol_filter` | `true` | 是否开启成交量过滤条件                                          |
 
 #### 2. PeakKDJSelector（填坑战法）
 

@@ -100,6 +100,8 @@ def bbi_deriv_uptrend(
         seg = bbi.iloc[-w:]                # 区间 [T-w+1, T]
         norm = seg / seg.iloc[0]           # 归一化
         diffs = np.diff(norm.values)       # 一阶差分
+        # 核心判断：检查一阶差分序列的q_threshold分位数是否≥0
+        # 即允许q_threshold比例的交易日出现BBI下降，剩余(1-q_threshold)比例保持上升趋势
         if np.quantile(diffs, q_threshold) >= 0:
             return True
     return False
@@ -151,6 +153,7 @@ class BBIKDJSelector:
         • KDJ: J < threshold ；或位于历史 J 的 j_q_threshold 分位及以下
         • MACD: DIF > 0
         • 收盘价波动幅度 ≤ price_range_pct
+        • 成交量: 连续 vol_less_days 天成交量小于近 vol_mean_window 天均值
     """
 
     def __init__(
@@ -161,6 +164,9 @@ class BBIKDJSelector:
         price_range_pct: float = 100.0,
         bbi_q_threshold: float = 0.05,
         j_q_threshold: float = 0.10,
+        vol_mean_window: int = 20,
+        vol_less_days: int = 3,
+        enable_vol_filter: bool = True,
     ) -> None:
         self.j_threshold = j_threshold
         self.bbi_min_window = bbi_min_window
@@ -168,6 +174,9 @@ class BBIKDJSelector:
         self.price_range_pct = price_range_pct
         self.bbi_q_threshold = bbi_q_threshold  # ← 原 q_threshold
         self.j_q_threshold = j_q_threshold      # ← 新增
+        self.vol_mean_window = vol_mean_window  # ← 新增：成交量均值窗口
+        self.vol_less_days = vol_less_days      # ← 新增：连续低于均值的天数
+        self.enable_vol_filter = enable_vol_filter  # ← 新增：控制成交量过滤是否开启
 
     # ---------- 单支股票过滤 ---------- #
     def _passes_filters(self, hist: pd.DataFrame) -> bool:
@@ -203,6 +212,19 @@ class BBIKDJSelector:
             
             return False
 
+        # 4. 成交量过滤：连续vol_less_days天成交量小于近vol_mean_window天均值（仅当enable_vol_filter为True时执行）
+        if self.enable_vol_filter:
+            if len(hist) < self.vol_mean_window + self.vol_less_days:
+                return False
+            
+            # 计算近vol_mean_window天的成交量均值
+            vol_mean = hist['volume'].tail(self.vol_mean_window).mean()
+            
+            # 检查最近vol_less_days天的成交量是否都小于均值
+            recent_vols = hist['volume'].tail(self.vol_less_days)
+            if not (recent_vols < vol_mean).all():
+                return False
+        
         # 3. MACD：DIF > 0
         hist["DIF"] = compute_dif(hist)
         return hist["DIF"].iloc[-1] > 0
